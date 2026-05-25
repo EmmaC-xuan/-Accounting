@@ -13,7 +13,6 @@ const C = {
 const inputStyle = { background:"#22263a", border:"1px solid #2e3350", borderRadius:10, color:"#e2e8f0", padding:"10px 14px", width:"100%", fontSize:15, boxSizing:"border-box", outline:"none" };
 const labelStyle = { fontSize:12, color:"#94a3b8", marginBottom:6, display:"block" };
 
-console.log("UField Rendered:", label);
 
 function UField({ label, refKey, refs, placeholder }) {
   return (
