@@ -17,7 +17,7 @@ function UField({ label, refKey, refs, placeholder }) {
   return (
     <div style={{ marginBottom:12 }}>
       <label style={labelStyle}>{label}</label>
-      <input ref={refs[refKey]} style={inputStyle} type="number" placeholder={placeholder} />
+      <input ref={refs[refKey]} style={inputStyle} type="text" inputMode="decimal" placeholder={placeholder} />
     </div>
   );
 }
