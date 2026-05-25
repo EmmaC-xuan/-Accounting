@@ -10,6 +10,18 @@ const C = {
   blue: "#3b82f6", text: "#e2e8f0", muted: "#94a3b8", tag: "#2d3149",
 };
 
+const inputStyle = { background:"#22263a", border:"1px solid #2e3350", borderRadius:10, color:"#e2e8f0", padding:"10px 14px", width:"100%", fontSize:15, boxSizing:"border-box", outline:"none" };
+const labelStyle = { fontSize:12, color:"#94a3b8", marginBottom:6, display:"block" };
+
+function UField({ label, refKey, refs, placeholder }) {
+  return (
+    <div style={{ marginBottom:12 }}>
+      <label style={labelStyle}>{label}</label>
+      <input ref={refs[refKey]} style={inputStyle} type="number" placeholder={placeholder} />
+    </div>
+  );
+}
+
 const PAY_TYPES = [
   { id: "cash", label: "現金", icon: "💵", color: C.green },
   { id: "account", label: "帳戶", icon: "🏦", color: C.blue },
@@ -182,12 +194,7 @@ export default function App() {
     divider: { height:1, background:C.border, margin:"10px 0" },
   };
 
-  const UField = ({ label, refKey, refs, placeholder }) => (
-    <div style={{ marginBottom:12 }}>
-      <label style={s.label}>{label}</label>
-      <input ref={refs[refKey]} style={s.input} type="number" placeholder={placeholder} />
-    </div>
-  );
+
 
   const ResultSummary = ({ myAmt, theirAmt, onRecord, onReset }) => (
     <>
