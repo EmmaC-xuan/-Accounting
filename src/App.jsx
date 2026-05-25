@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 
 const DEFAULT_CATEGORIES = ["餐飲", "交通", "購物", "娛樂", "醫療", "住房", "教育", "旅遊", "保險", "其他"];
 const INCOME_CATEGORIES = ["薪資", "獎金", "股票", "其他"];
@@ -39,28 +39,33 @@ const initState = () => {
   return { transactions: [], creditBills: [], customCategories: [] };
 };
 
-const initElec = () => ({ totalBill:"", flowElec:"", totalKwh:"", pubElec:"", prevMeter:"", curMeter:"", date:today(), note:"", result:null });
-const initWater = () => ({ totalBill:"", date:today(), note:"", result:null });
-const initGas = () => ({ totalBill:"", date:today(), note:"", result:null });
+// Utility result state only (no controlled inputs)
+const initResult = () => ({ elec: null, water: null, gas: null });
 
 export default function App() {
   const now = new Date();
   const [state, setState] = useState(initState);
   const [view, setView] = useState("dashboard");
-  const [utilTab, setUtilTab] = useState("elec"); // elec | water | gas
+  const [utilTab, setUtilTab] = useState("elec");
   const [selYear, setSelYear] = useState(now.getFullYear());
   const [selMonth, setSelMonth] = useState(now.getMonth());
   const [form, setForm] = useState({ type:"expense", payType:"cash", amount:"", desc:"", category:"餐飲", incomeCategory:"薪資", date:today(), autocat:false });
   const [billForm, setBillForm] = useState({ amount:"", date:today(), card:"信用卡", note:"" });
   const [newCat, setNewCat] = useState("");
-  const [elec, setElec] = useState(initElec);
-  const [water, setWater] = useState(initWater);
-  const [gas, setGas] = useState(initGas);
+  const [results, setResults] = useState(initResult);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
-  const allCats = [...DEFAULT_CATEGORIES, ...state.customCategories];
+  // Refs for utility inputs (uncontrolled)
+  const eRef = {
+    totalBill: useRef(), flowElec: useRef(), totalKwh: useRef(),
+    pubElec: useRef(), prevMeter: useRef(), curMeter: useRef(),
+    date: useRef(), note: useRef(),
+  };
+  const wRef = { totalBill: useRef(), date: useRef(), note: useRef() };
+  const gRef = { totalBill: useRef(), date: useRef(), note: useRef() };
 
+  const allCats = [...DEFAULT_CATEGORIES, ...state.customCategories];
   const save = (s) => { try { localStorage.setItem("budget_app_v3", JSON.stringify(s)); } catch {} };
 
   function showToast(msg, color=C.green) {
@@ -108,46 +113,43 @@ export default function App() {
     setNewCat(""); showToast("分類已新增 ✓");
   }
 
-  // Calc functions
   function calcElec() {
-    const totalBill=parseFloat(elec.totalBill), flowElec=parseFloat(elec.flowElec),
-          totalKwh=parseFloat(elec.totalKwh), pubElec=parseFloat(elec.pubElec),
-          prevMeter=parseFloat(elec.prevMeter), curMeter=parseFloat(elec.curMeter);
+    const v = k => parseFloat(eRef[k].current?.value);
+    const [totalBill,flowElec,totalKwh,pubElec,prevMeter,curMeter] = ["totalBill","flowElec","totalKwh","pubElec","prevMeter","curMeter"].map(v);
     if ([totalBill,flowElec,totalKwh,pubElec,prevMeter,curMeter].some(isNaN)) { showToast("電費資料不完整", C.red); return; }
     if (curMeter<=prevMeter) { showToast("本次錶數須大於上次錶數", C.red); return; }
     const pricePerKwh = flowElec/totalKwh;
     const theirKwh = curMeter-prevMeter;
     const theirElec = theirKwh*pricePerKwh + pubElec/2;
     const myElec = totalBill-theirElec;
-    setElec(e => ({ ...e, result:{ pricePerKwh, theirKwh, theirElec, myElec, totalBill, flowElec, totalKwh, pubElec, prevMeter, curMeter } }));
+    setResults(r => ({ ...r, elec:{ pricePerKwh, theirKwh, theirElec, myElec, totalBill, flowElec, totalKwh, pubElec, prevMeter, curMeter, date: eRef.date.current?.value||today(), note: eRef.note.current?.value||"" } }));
   }
 
   function calcWater() {
-    const totalBill=parseFloat(water.totalBill);
+    const totalBill = parseFloat(wRef.totalBill.current?.value);
     if (isNaN(totalBill)||totalBill<=0) { showToast("請輸入正確水費金額", C.red); return; }
-    setWater(w => ({ ...w, result:{ totalBill, myWater:totalBill/2, theirWater:totalBill/2 } }));
+    setResults(r => ({ ...r, water:{ totalBill, myWater:totalBill/2, theirWater:totalBill/2, date: wRef.date.current?.value||today(), note: wRef.note.current?.value||"" } }));
   }
 
   function calcGas() {
-    const totalBill=parseFloat(gas.totalBill);
+    const totalBill = parseFloat(gRef.totalBill.current?.value);
     if (isNaN(totalBill)||totalBill<=0) { showToast("請輸入正確瓦斯費金額", C.red); return; }
-    setGas(g => ({ ...g, result:{ totalBill, myGas:totalBill/2, theirGas:totalBill/2 } }));
+    setResults(r => ({ ...r, gas:{ totalBill, myGas:totalBill/2, theirGas:totalBill/2, date: gRef.date.current?.value||today(), note: gRef.note.current?.value||"" } }));
   }
 
   function recordElec() {
-    if (!elec.result) return;
-    addTransaction({ type:"expense", payType:"account", category:"住房", date:elec.date, desc:`電費${elec.note?`（${elec.note}）`:""}`, amount:elec.result.myElec, incomeCategory:"薪資", autocat:false });
+    const r = results.elec; if (!r) return;
+    addTransaction({ type:"expense", payType:"account", category:"住房", date:r.date, desc:`電費${r.note?`（${r.note}）`:""}`, amount:r.myElec, incomeCategory:"薪資", autocat:false });
   }
   function recordWater() {
-    if (!water.result) return;
-    addTransaction({ type:"expense", payType:"account", category:"住房", date:water.date, desc:`水費${water.note?`（${water.note}）`:""}`, amount:water.result.myWater, incomeCategory:"薪資", autocat:false });
+    const r = results.water; if (!r) return;
+    addTransaction({ type:"expense", payType:"account", category:"住房", date:r.date, desc:`水費${r.note?`（${r.note}）`:""}`, amount:r.myWater, incomeCategory:"薪資", autocat:false });
   }
   function recordGas() {
-    if (!gas.result) return;
-    addTransaction({ type:"expense", payType:"account", category:"住房", date:gas.date, desc:`瓦斯費${gas.note?`（${gas.note}）`:""}`, amount:gas.result.myGas, incomeCategory:"薪資", autocat:false });
+    const r = results.gas; if (!r) return;
+    addTransaction({ type:"expense", payType:"account", category:"住房", date:r.date, desc:`瓦斯費${r.note?`（${r.note}）`:""}`, amount:r.myGas, incomeCategory:"薪資", autocat:false });
   }
 
-  // Monthly stats
   const mk = getMonthKey(selYear, selMonth);
   const monthTxs = state.transactions.filter(t => t.date.startsWith(mk));
   const monthBills = state.creditBills.filter(b => b.date.startsWith(mk));
@@ -176,32 +178,18 @@ export default function App() {
     tag: (a,color=C.accent) => ({ background:a?color:C.tag, border:`1px solid ${a?color:C.border}`, borderRadius:8, color:a?"#fff":C.muted, padding:"7px 14px", cursor:"pointer", fontSize:13, fontWeight:a?700:400 }),
     statCard: (color) => ({ background:C.card, borderRadius:14, padding:"14px 16px", border:`1px solid ${C.border}`, borderLeft:`4px solid ${color}`, flex:1, minWidth:0 }),
     row: { display:"flex", gap:10 },
-    resultRow: { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", fontSize:14 },
+    rRow: { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", fontSize:14 },
     divider: { height:1, background:C.border, margin:"10px 0" },
   };
 
-  const field = (setter, k, label, placeholder, type="number") => (
+  const UField = ({ label, refKey, refs, placeholder }) => (
     <div style={{ marginBottom:12 }}>
       <label style={s.label}>{label}</label>
-      <input style={s.input} type={type} placeholder={placeholder}
-        onChange={e => setter(v=>({...v,[k]:e.target.value,result:null}))} />
+      <input ref={refs[refKey]} style={s.input} type="number" placeholder={placeholder} />
     </div>
   );
 
-  const dateNoteRow = (section, setter) => (
-    <div style={{ display:"flex", gap:10, marginBottom:12 }}>
-      <div style={{ flex:1 }}>
-        <label style={s.label}>帳單日期</label>
-        <input style={s.input} type="date" value={section.date} onChange={e=>setter(v=>({...v,date:e.target.value,result:null}))} />
-      </div>
-      <div style={{ flex:1 }}>
-        <label style={s.label}>備註（幾月帳單）</label>
-        <input style={s.input} placeholder="例：5月帳單" value={section.note} onChange={e=>setter(v=>({...v,note:e.target.value,result:null}))} />
-      </div>
-    </div>
-  );
-
-  const ResultSummary = ({ myAmt, theirAmt, color, onRecord, onReset }) => (
+  const ResultSummary = ({ myAmt, theirAmt, onRecord, onReset }) => (
     <>
       <div style={{ background:"#1a1340", borderRadius:12, padding:"16px", border:`1px solid ${C.accent}`, marginTop:12 }}>
         <div style={{ fontWeight:700, fontSize:13, marginBottom:10, color:C.accent }}>💰 分攤結果</div>
@@ -223,9 +211,6 @@ export default function App() {
     </>
   );
 
-  // Utility sub-tabs
-  const utilTabs = [["elec","⚡","電費"],["water","💧","水費"],["gas","🔥","瓦斯"]];
-
   return (
     <div style={s.app}>
       {toast && (
@@ -241,7 +226,6 @@ export default function App() {
 
       <div style={{ padding:"16px 16px 0" }}>
 
-        {/* DASHBOARD */}
         {view==="dashboard" && (
           <>
             <div style={{ display:"flex", gap:8, marginBottom:14, alignItems:"center" }}>
@@ -295,7 +279,6 @@ export default function App() {
           </>
         )}
 
-        {/* ADD */}
         {view==="add" && (
           <div style={s.card}>
             <div style={{ fontWeight:700, fontSize:16, marginBottom:16 }}>新增記錄</div>
@@ -350,7 +333,6 @@ export default function App() {
           </div>
         )}
 
-        {/* BILLS */}
         {view==="bills" && (
           <>
             <div style={s.card}>
@@ -382,113 +364,131 @@ export default function App() {
           </>
         )}
 
-        {/* UTILITY */}
         {view==="utility" && (
           <>
-            {/* Sub tabs */}
             <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-              {utilTabs.map(([k,icon,label]) => (
+              {[["elec","⚡","電費"],["water","💧","水費"],["gas","🔥","瓦斯"]].map(([k,icon,label]) => (
                 <button key={k} style={{ ...s.tag(utilTab===k), flex:1, textAlign:"center" }} onClick={()=>setUtilTab(k)}>{icon} {label}</button>
               ))}
             </div>
 
             {/* ELECTRIC */}
             {utilTab==="elec" && (
-              <>
-                {!elec.result ? (
-                  <div style={s.card}>
-                    <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>⚡ 電費計算</div>
-                    <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>對方有獨立電表，依度數比例分攤</div>
-                    {dateNoteRow(elec, setElec)}
-                    {field(setElec, "totalBill", "帳單總金額 (NT$)", "例：6000")}
-                    {field(setElec, "flowElec", "流動電費 (NT$)", "例：5562")}
-                    {field(setElec, "totalKwh", "本期總度數 (度)", "例：1645")}
-                    {field(setElec, "pubElec", "公共電費 (NT$)", "例：142.2")}
-                    <div style={{ height:1, background:C.border, margin:"12px 0" }} />
-                    <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>對方獨立電表</div>
-                    {field(setElec, "prevMeter", "上次錶數 (度)", "例：32440")}
-                    {field(setElec, "curMeter", "本次錶數 (度)", "例：33655")}
-                    <button style={s.btn(C.accent)} onClick={calcElec}>計算電費分攤</button>
-                  </div>
-                ) : (
-                  <div style={s.card}>
-                    <div style={{ fontWeight:700, fontSize:16, marginBottom:2 }}>⚡ 電費明細</div>
-                    <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>{elec.date}{elec.note ? ` · ${elec.note}` : ""}</div>
-                    <div style={{ background:C.card2, borderRadius:12, padding:14 }}>
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>帳單總金額</span><span style={{ fontWeight:700 }}>{fmt(elec.result.totalBill)}</span></div>
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>流動電費</span><span style={{ fontWeight:700 }}>{fmt(elec.result.flowElec)}</span></div>
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>本期總度數</span><span style={{ fontWeight:700 }}>{elec.result.totalKwh} 度</span></div>
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>一度電費</span><span style={{ fontWeight:700 }}>NT$ {fmtN(elec.result.pricePerKwh)}</span></div>
-                      <div style={{ height:1, background:C.border, margin:"8px 0" }} />
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>對方本期用電</span><span style={{ fontWeight:700 }}>{fmtN(elec.result.theirKwh)} 度（{elec.result.curMeter} - {elec.result.prevMeter}）</span></div>
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>公共電費各半</span><span style={{ fontWeight:700 }}>NT$ {fmtN(elec.result.pubElec/2)}</span></div>
-                      <div style={{ height:1, background:C.border, margin:"8px 0" }} />
-                      <div style={s.resultRow}><span style={{ color:C.text, fontWeight:600 }}>對方電費</span><span style={{ color:C.yellow, fontWeight:800, fontSize:17 }}>{fmt(elec.result.theirElec)}</span></div>
-                      <div style={s.resultRow}><span style={{ color:C.text, fontWeight:600 }}>我的電費</span><span style={{ color:C.green, fontWeight:800, fontSize:17 }}>{fmt(elec.result.myElec)}</span></div>
+              !results.elec ? (
+                <div style={s.card}>
+                  <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>⚡ 電費計算</div>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>對方有獨立電表，依度數比例分攤</div>
+                  <div style={{ display:"flex", gap:10, marginBottom:12 }}>
+                    <div style={{ flex:1 }}>
+                      <label style={s.label}>帳單日期</label>
+                      <input ref={eRef.date} defaultValue={today()} style={s.input} type="date" />
                     </div>
-                    <ResultSummary myAmt={elec.result.myElec} theirAmt={elec.result.theirElec} onRecord={recordElec} onReset={()=>setElec(initElec)} />
+                    <div style={{ flex:1 }}>
+                      <label style={s.label}>備註（幾月帳單）</label>
+                      <input ref={eRef.note} style={s.input} placeholder="例：5月帳單" />
+                    </div>
                   </div>
-                )}
-              </>
+                  <UField label="帳單總金額 (NT$)" refKey="totalBill" refs={eRef} placeholder="例：6000" />
+                  <UField label="流動電費 (NT$)" refKey="flowElec" refs={eRef} placeholder="例：5562" />
+                  <UField label="本期總度數 (度)" refKey="totalKwh" refs={eRef} placeholder="例：1645" />
+                  <UField label="公共電費 (NT$)" refKey="pubElec" refs={eRef} placeholder="例：142.2" />
+                  <div style={s.divider} />
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>對方獨立電表</div>
+                  <UField label="上次錶數 (度)" refKey="prevMeter" refs={eRef} placeholder="例：32440" />
+                  <UField label="本次錶數 (度)" refKey="curMeter" refs={eRef} placeholder="例：33655" />
+                  <button style={s.btn(C.accent)} onClick={calcElec}>計算電費分攤</button>
+                </div>
+              ) : (
+                <div style={s.card}>
+                  <div style={{ fontWeight:700, fontSize:16, marginBottom:2 }}>⚡ 電費明細</div>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>{results.elec.date}{results.elec.note ? ` · ${results.elec.note}` : ""}</div>
+                  <div style={{ background:C.card2, borderRadius:12, padding:14 }}>
+                    <div style={s.rRow}><span style={{ color:C.muted }}>帳單總金額</span><span style={{ fontWeight:700 }}>{fmt(results.elec.totalBill)}</span></div>
+                    <div style={s.rRow}><span style={{ color:C.muted }}>流動電費</span><span style={{ fontWeight:700 }}>{fmt(results.elec.flowElec)}</span></div>
+                    <div style={s.rRow}><span style={{ color:C.muted }}>本期總度數</span><span style={{ fontWeight:700 }}>{results.elec.totalKwh} 度</span></div>
+                    <div style={s.rRow}><span style={{ color:C.muted }}>一度電費</span><span style={{ fontWeight:700 }}>NT$ {fmtN(results.elec.pricePerKwh)}</span></div>
+                    <div style={s.divider} />
+                    <div style={s.rRow}><span style={{ color:C.muted }}>對方本期用電</span><span style={{ fontWeight:700 }}>{fmtN(results.elec.theirKwh)} 度（{results.elec.curMeter} - {results.elec.prevMeter}）</span></div>
+                    <div style={s.rRow}><span style={{ color:C.muted }}>公共電費各半</span><span style={{ fontWeight:700 }}>NT$ {fmtN(results.elec.pubElec/2)}</span></div>
+                    <div style={s.divider} />
+                    <div style={s.rRow}><span style={{ color:C.text, fontWeight:600 }}>對方電費</span><span style={{ color:C.yellow, fontWeight:800, fontSize:17 }}>{fmt(results.elec.theirElec)}</span></div>
+                    <div style={s.rRow}><span style={{ color:C.text, fontWeight:600 }}>我的電費</span><span style={{ color:C.green, fontWeight:800, fontSize:17 }}>{fmt(results.elec.myElec)}</span></div>
+                  </div>
+                  <ResultSummary myAmt={results.elec.myElec} theirAmt={results.elec.theirElec} onRecord={recordElec} onReset={()=>setResults(r=>({...r,elec:null}))} />
+                </div>
+              )
             )}
 
             {/* WATER */}
             {utilTab==="water" && (
-              <>
-                {!water.result ? (
-                  <div style={s.card}>
-                    <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>💧 水費計算</div>
-                    <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>帳單總額各付一半</div>
-                    {dateNoteRow(water, setWater)}
-                    {field(setWater, "totalBill", "帳單總金額 (NT$)", "例：600")}
-                    <button style={s.btn(C.blue)} onClick={calcWater}>計算水費分攤</button>
-                  </div>
-                ) : (
-                  <div style={s.card}>
-                    <div style={{ fontWeight:700, fontSize:16, marginBottom:2 }}>💧 水費明細</div>
-                    <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>{water.date}{water.note ? ` · ${water.note}` : ""}</div>
-                    <div style={{ background:C.card2, borderRadius:12, padding:14 }}>
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>帳單總金額</span><span style={{ fontWeight:700 }}>{fmt(water.result.totalBill)}</span></div>
-                      <div style={{ height:1, background:C.border, margin:"8px 0" }} />
-                      <div style={s.resultRow}><span style={{ color:C.text, fontWeight:600 }}>對方水費</span><span style={{ color:C.yellow, fontWeight:800, fontSize:17 }}>{fmt(water.result.theirWater)}</span></div>
-                      <div style={s.resultRow}><span style={{ color:C.text, fontWeight:600 }}>我的水費</span><span style={{ color:C.green, fontWeight:800, fontSize:17 }}>{fmt(water.result.myWater)}</span></div>
+              !results.water ? (
+                <div style={s.card}>
+                  <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>💧 水費計算</div>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>帳單總額各付一半</div>
+                  <div style={{ display:"flex", gap:10, marginBottom:12 }}>
+                    <div style={{ flex:1 }}>
+                      <label style={s.label}>帳單日期</label>
+                      <input ref={wRef.date} defaultValue={today()} style={s.input} type="date" />
                     </div>
-                    <ResultSummary myAmt={water.result.myWater} theirAmt={water.result.theirWater} onRecord={recordWater} onReset={()=>setWater(initWater)} />
+                    <div style={{ flex:1 }}>
+                      <label style={s.label}>備註（幾月帳單）</label>
+                      <input ref={wRef.note} style={s.input} placeholder="例：5月帳單" />
+                    </div>
                   </div>
-                )}
-              </>
+                  <UField label="帳單總金額 (NT$)" refKey="totalBill" refs={wRef} placeholder="例：600" />
+                  <button style={s.btn(C.blue)} onClick={calcWater}>計算水費分攤</button>
+                </div>
+              ) : (
+                <div style={s.card}>
+                  <div style={{ fontWeight:700, fontSize:16, marginBottom:2 }}>💧 水費明細</div>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>{results.water.date}{results.water.note ? ` · ${results.water.note}` : ""}</div>
+                  <div style={{ background:C.card2, borderRadius:12, padding:14 }}>
+                    <div style={s.rRow}><span style={{ color:C.muted }}>帳單總金額</span><span style={{ fontWeight:700 }}>{fmt(results.water.totalBill)}</span></div>
+                    <div style={s.divider} />
+                    <div style={s.rRow}><span style={{ color:C.text, fontWeight:600 }}>對方水費</span><span style={{ color:C.yellow, fontWeight:800, fontSize:17 }}>{fmt(results.water.theirWater)}</span></div>
+                    <div style={s.rRow}><span style={{ color:C.text, fontWeight:600 }}>我的水費</span><span style={{ color:C.green, fontWeight:800, fontSize:17 }}>{fmt(results.water.myWater)}</span></div>
+                  </div>
+                  <ResultSummary myAmt={results.water.myWater} theirAmt={results.water.theirWater} onRecord={recordWater} onReset={()=>setResults(r=>({...r,water:null}))} />
+                </div>
+              )
             )}
 
             {/* GAS */}
             {utilTab==="gas" && (
-              <>
-                {!gas.result ? (
-                  <div style={s.card}>
-                    <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>🔥 瓦斯費計算</div>
-                    <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>帳單總額各付一半</div>
-                    {dateNoteRow(gas, setGas)}
-                    {field(setGas, "totalBill", "帳單總金額 (NT$)", "例：800")}
-                    <button style={s.btn(C.red)} onClick={calcGas}>計算瓦斯費分攤</button>
-                  </div>
-                ) : (
-                  <div style={s.card}>
-                    <div style={{ fontWeight:700, fontSize:16, marginBottom:2 }}>🔥 瓦斯費明細</div>
-                    <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>{gas.date}{gas.note ? ` · ${gas.note}` : ""}</div>
-                    <div style={{ background:C.card2, borderRadius:12, padding:14 }}>
-                      <div style={s.resultRow}><span style={{ color:C.muted }}>帳單總金額</span><span style={{ fontWeight:700 }}>{fmt(gas.result.totalBill)}</span></div>
-                      <div style={{ height:1, background:C.border, margin:"8px 0" }} />
-                      <div style={s.resultRow}><span style={{ color:C.text, fontWeight:600 }}>對方瓦斯費</span><span style={{ color:C.yellow, fontWeight:800, fontSize:17 }}>{fmt(gas.result.theirGas)}</span></div>
-                      <div style={s.resultRow}><span style={{ color:C.text, fontWeight:600 }}>我的瓦斯費</span><span style={{ color:C.green, fontWeight:800, fontSize:17 }}>{fmt(gas.result.myGas)}</span></div>
+              !results.gas ? (
+                <div style={s.card}>
+                  <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>🔥 瓦斯費計算</div>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>帳單總額各付一半</div>
+                  <div style={{ display:"flex", gap:10, marginBottom:12 }}>
+                    <div style={{ flex:1 }}>
+                      <label style={s.label}>帳單日期</label>
+                      <input ref={gRef.date} defaultValue={today()} style={s.input} type="date" />
                     </div>
-                    <ResultSummary myAmt={gas.result.myGas} theirAmt={gas.result.theirGas} onRecord={recordGas} onReset={()=>setGas(initGas)} />
+                    <div style={{ flex:1 }}>
+                      <label style={s.label}>備註（幾月帳單）</label>
+                      <input ref={gRef.note} style={s.input} placeholder="例：5月帳單" />
+                    </div>
                   </div>
-                )}
-              </>
+                  <UField label="帳單總金額 (NT$)" refKey="totalBill" refs={gRef} placeholder="例：800" />
+                  <button style={s.btn(C.red)} onClick={calcGas}>計算瓦斯費分攤</button>
+                </div>
+              ) : (
+                <div style={s.card}>
+                  <div style={{ fontWeight:700, fontSize:16, marginBottom:2 }}>🔥 瓦斯費明細</div>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>{results.gas.date}{results.gas.note ? ` · ${results.gas.note}` : ""}</div>
+                  <div style={{ background:C.card2, borderRadius:12, padding:14 }}>
+                    <div style={s.rRow}><span style={{ color:C.muted }}>帳單總金額</span><span style={{ fontWeight:700 }}>{fmt(results.gas.totalBill)}</span></div>
+                    <div style={s.divider} />
+                    <div style={s.rRow}><span style={{ color:C.text, fontWeight:600 }}>對方瓦斯費</span><span style={{ color:C.yellow, fontWeight:800, fontSize:17 }}>{fmt(results.gas.theirGas)}</span></div>
+                    <div style={s.rRow}><span style={{ color:C.text, fontWeight:600 }}>我的瓦斯費</span><span style={{ color:C.green, fontWeight:800, fontSize:17 }}>{fmt(results.gas.myGas)}</span></div>
+                  </div>
+                  <ResultSummary myAmt={results.gas.myGas} theirAmt={results.gas.theirGas} onRecord={recordGas} onReset={()=>setResults(r=>({...r,gas:null}))} />
+                </div>
+              )
             )}
           </>
         )}
 
-        {/* HISTORY */}
         {view==="history" && (
           <>
             <div style={{ fontWeight:700, fontSize:16, marginBottom:14 }}>所有記錄</div>
