@@ -180,16 +180,15 @@ export default function App() {
     divider: { height:1, background:C.border, margin:"10px 0" },
   };
 
-  const Field = ({ section, setter, k, label, placeholder, type="number" }) => (
+  const field = (setter, k, label, placeholder, type="number") => (
     <div style={{ marginBottom:12 }}>
       <label style={s.label}>{label}</label>
       <input style={s.input} type={type} placeholder={placeholder}
-        value={section[k]}
         onChange={e => setter(v=>({...v,[k]:e.target.value,result:null}))} />
     </div>
   );
 
-  const DateNoteRow = ({ section, setter }) => (
+  const dateNoteRow = (section, setter) => (
     <div style={{ display:"flex", gap:10, marginBottom:12 }}>
       <div style={{ flex:1 }}>
         <label style={s.label}>帳單日期</label>
@@ -400,15 +399,15 @@ export default function App() {
                   <div style={s.card}>
                     <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>⚡ 電費計算</div>
                     <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>對方有獨立電表，依度數比例分攤</div>
-                    <DateNoteRow section={elec} setter={setElec} />
-                    <Field section={elec} setter={setElec} k="totalBill" label="帳單總金額 (NT$)" placeholder="例：6000" />
-                    <Field section={elec} setter={setElec} k="flowElec" label="流動電費 (NT$)" placeholder="例：5562" />
-                    <Field section={elec} setter={setElec} k="totalKwh" label="本期總度數 (度)" placeholder="例：1645" />
-                    <Field section={elec} setter={setElec} k="pubElec" label="公共電費 (NT$)" placeholder="例：142.2" />
+                    {dateNoteRow(elec, setElec)}
+                    {field(setElec, "totalBill", "帳單總金額 (NT$)", "例：6000")}
+                    {field(setElec, "flowElec", "流動電費 (NT$)", "例：5562")}
+                    {field(setElec, "totalKwh", "本期總度數 (度)", "例：1645")}
+                    {field(setElec, "pubElec", "公共電費 (NT$)", "例：142.2")}
                     <div style={{ height:1, background:C.border, margin:"12px 0" }} />
                     <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>對方獨立電表</div>
-                    <Field section={elec} setter={setElec} k="prevMeter" label="上次錶數 (度)" placeholder="例：32440" />
-                    <Field section={elec} setter={setElec} k="curMeter" label="本次錶數 (度)" placeholder="例：33655" />
+                    {field(setElec, "prevMeter", "上次錶數 (度)", "例：32440")}
+                    {field(setElec, "curMeter", "本次錶數 (度)", "例：33655")}
                     <button style={s.btn(C.accent)} onClick={calcElec}>計算電費分攤</button>
                   </div>
                 ) : (
@@ -440,8 +439,8 @@ export default function App() {
                   <div style={s.card}>
                     <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>💧 水費計算</div>
                     <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>帳單總額各付一半</div>
-                    <DateNoteRow section={water} setter={setWater} />
-                    <Field section={water} setter={setWater} k="totalBill" label="帳單總金額 (NT$)" placeholder="例：600" />
+                    {dateNoteRow(water, setWater)}
+                    {field(setWater, "totalBill", "帳單總金額 (NT$)", "例：600")}
                     <button style={s.btn(C.blue)} onClick={calcWater}>計算水費分攤</button>
                   </div>
                 ) : (
@@ -467,8 +466,8 @@ export default function App() {
                   <div style={s.card}>
                     <div style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>🔥 瓦斯費計算</div>
                     <div style={{ fontSize:12, color:C.muted, marginBottom:14 }}>帳單總額各付一半</div>
-                    <DateNoteRow section={gas} setter={setGas} />
-                    <Field section={gas} setter={setGas} k="totalBill" label="帳單總金額 (NT$)" placeholder="例：800" />
+                    {dateNoteRow(gas, setGas)}
+                    {field(setGas, "totalBill", "帳單總金額 (NT$)", "例：800")}
                     <button style={s.btn(C.red)} onClick={calcGas}>計算瓦斯費分攤</button>
                   </div>
                 ) : (
